@@ -2,6 +2,7 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Introspection.h"
+#include "Pipeline.h"
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -522,6 +523,9 @@ int get_llvm_version() {
 }  // namespace Internal
 
 void load_plugin(const std::string &lib_name) {
+    typedef const char *(*name_fn)();
+    typedef void (*run_fn)(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *);
+
 #ifdef _WIN32
     std::string lib_path = lib_name;
     if (lib_path.find('.') == std::string::npos) {
@@ -539,7 +543,8 @@ void load_plugin(const std::string &lib_name) {
         user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
     }
 
-    if (!LoadLibraryW(wide_lib.data())) {
+    HMODULE library = LoadLibraryW(wide_lib.data());
+    if (!library) {
         DWORD last_err = GetLastError();
         LPVOID last_err_msg;
         FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
@@ -552,15 +557,41 @@ void load_plugin(const std::string &lib_name) {
                    << "LoadLibraryW failed with error " << last_err << ": "
                    << err_msg << "\n";
     }
+
+    FARPROC as_name = GetProcAddress(library, "AutoschedulerName");
+    user_assert(as_name)
+        << "Failed to load: " << lib_path << ".\n"
+        << "Expected to find AutoschedulerName\n";
+
+    FARPROC as_run = GetProcAddress(library, "AutoschedulerRun");
+    user_assert(as_run)
+        << "Failed to load: " << lib_path << ".\n"
+        << "Expected to find void AutoschedulerRun(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *)\n";
+
+    std::string name = ((name_fn)as_name)();
+    Pipeline::add_autoscheduler(name, (run_fn)as_run);
+
 #else
     std::string lib_path = lib_name;
     if (lib_path.find('.') == std::string::npos) {
         lib_path = "lib" + lib_path + ".so";
     }
-    if (dlopen(lib_path.c_str(), RTLD_LAZY) == nullptr) {
-        user_error << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
-    }
+    void *library = dlopen(lib_path.c_str(), RTLD_LAZY);
+    user_assert(library)
+        << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
+
+    void *as_name = dlsym(library, "AutoschedulerName");
+    user_assert(as_name)
+        << "Failed to load: " << lib_path << ".\n"
+        << "Expected to find AutoschedulerName()\n";
+
+    void *as_run = dlsym(library, "AutoschedulerRun");
+    user_assert(as_run)
+        << "Failed to load: " << lib_path << ".\n"
+        << "Expected to find AutoschedulerRun()\n";
+
+    std::string name = ((name_fn)as_name)();
+    Pipeline::add_autoscheduler(name, (run_fn)as_run);
 #endif
 }
-
 }  // namespace Halide

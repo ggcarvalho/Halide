@@ -1,3 +1,6 @@
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
+
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # Don't attempt to build these for wasm yet.
 else ()
