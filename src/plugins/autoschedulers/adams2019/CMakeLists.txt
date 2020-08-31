@@ -45,11 +45,16 @@ add_library(Halide_Adams2019
             Weights.cpp
             ${WF_CPP})
 add_library(Halide::Adams2019 ALIAS Halide_Adams2019)
+
+include(GenerateExportHeader)
+generate_export_header(Halide_Adams2019)
+target_include_directories(Halide_Adams2019 PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
+
+target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Halide)
+
 set_target_properties(Halide_Adams2019 PROPERTIES
                       EXPORT_NAME Adams2019
                       OUTPUT_NAME auto_schedule)
-
-target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Halide)
 
 ##
 # Tests and demos
